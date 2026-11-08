@@ -1,0 +1,277 @@
+name: Auralis Foundation Bootstrap
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/foundation-bootstrap.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: auralis-foundation-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  bootstrap-and-verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.9
+          cache: true
+
+      - name: Verify SDK
+        run: |
+          flutter --version
+          dart --version
+
+      - name: Guard against overwriting an existing Flutter project
+        run: |
+          if [ -e pubspec.yaml ] || [ -e android ] || [ -e ios ] || [ -e lib ]; then
+            echo "A Flutter project already exists. Refusing to overwrite repository content."
+            exit 1
+          fi
+
+      - name: Generate Android and iOS platform scaffold
+        run: |
+          flutter create \
+            --platforms=android,ios \
+            --org=com.auralis \
+            --project-name=auralis \
+            --description="A reusable Flutter foundation for Android and iOS." \
+            "$RUNNER_TEMP/auralis_scaffold"
+
+          cp -R "$RUNNER_TEMP/auralis_scaffold/android" ./android
+          cp -R "$RUNNER_TEMP/auralis_scaffold/ios" ./ios
+          cp "$RUNNER_TEMP/auralis_scaffold/pubspec.yaml" ./pubspec.yaml
+          cp "$RUNNER_TEMP/auralis_scaffold/analysis_options.yaml" ./analysis_options.yaml
+          cp "$RUNNER_TEMP/auralis_scaffold/.metadata" ./.metadata
+
+      - name: Create minimal application entry point
+        run: |
+          mkdir -p lib/app test
+          cat > lib/main.dart <<'DART'
+          import 'package:auralis/app/auralis_app.dart';
+          import 'package:flutter/widgets.dart';
+
+          void main() {
+            runApp(const AuralisApp());
+          }
+          DART
+
+          cat > lib/app/auralis_app.dart <<'DART'
+          import 'package:flutter/widgets.dart';
+
+          class AuralisApp extends StatelessWidget {
+            const AuralisApp({super.key});
+
+            @override
+            Widget build(BuildContext context) {
+              return WidgetsApp(
+                color: const Color(0xFF000000),
+                home: const AuralisRoot(),
+              );
+            }
+          }
+
+          class AuralisRoot extends StatelessWidget {
+            const AuralisRoot({super.key});
+
+            @override
+            Widget build(BuildContext context) {
+              return const SizedBox.expand();
+            }
+          }
+          DART
+
+          cat > test/widget_test.dart <<'DART'
+          import 'package:auralis/app/auralis_app.dart';
+          import 'package:flutter_test/flutter_test.dart';
+
+          void main() {
+            testWidgets('boots the Auralis widget application', (tester) async {
+              await tester.pumpWidget(const AuralisApp());
+
+              expect(find.byType(AuralisRoot), findsOneWidget);
+            });
+          }
+          DART
+
+      - name: Set supported platform minimums
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          gradle_candidates = [
+              Path("android/app/build.gradle.kts"),
+              Path("android/app/build.gradle"),
+          ]
+          gradle = next((path for path in gradle_candidates if path.is_file()), None)
+          if gradle is None:
+              raise SystemExit("Android app Gradle file not found")
+
+          source = gradle.read_text()
+          patterns = [
+              (r"minSdk\\s*=\\s*flutter\\.minSdkVersion", "minSdk = 24"),
+              (r"minSdkVersion\\s+flutter\\.minSdkVersion", "minSdkVersion 24"),
+          ]
+          changed = False
+          for pattern, replacement in patterns:
+              source, count = re.subn(pattern, replacement, source)
+              changed = changed or count > 0
+          if not changed:
+              raise SystemExit("Could not locate generated Android minSdk declaration")
+          gradle.write_text(source)
+
+          project = Path("ios/Runner.xcodeproj/project.pbxproj")
+          if not project.is_file():
+              raise SystemExit("iOS Xcode project not found")
+          source = project.read_text()
+          source, count = re.subn(
+              r"IPHONEOS_DEPLOYMENT_TARGET = [0-9.]+;",
+              "IPHONEOS_DEPLOYMENT_TARGET = 15.0;",
+              source,
+          )
+          if count == 0:
+              raise SystemExit("Could not locate iOS deployment target")
+          project.write_text(source)
+          PY
+
+      - name: Pin Flutter SDK for local FVM use
+        run: |
+          cat > .fvmrc <<'JSON'
+          {
+            "flutter": "3.47.9",
+            "flavor": "stable"
+          }
+          JSON
+
+      - name: Update repository ignore rules
+        run: |
+          cat > .gitignore <<'IGNORE'
+          # Dart / Flutter
+          .dart_tool/
+          .packages
+          .pub/
+          .pub-cache/
+          build/
+          .flutter-plugins
+          .flutter-plugins-dependencies
+
+          # FVM SDK symlink (keep .fvmrc tracked)
+          .fvm/flutter_sdk
+
+          # Android / iOS local state
+          android/local.properties
+          ios/Flutter/Generated.xcconfig
+          ios/Flutter/flutter_export_environment.sh
+
+          # IDEs
+          .idea/
+          .vscode/
+          *.iml
+
+          # OS
+          .DS_Store
+          Thumbs.db
+
+          # Local environment and secrets
+          .env
+          .env.*
+          !.env.example
+          IGNORE
+
+      - name: Update project documentation
+        run: |
+          cat > README.md <<'README'
+          # Auralis
+
+          A mobile-first Flutter foundation for building Android and iOS applications, with an original design system owned by this project.
+
+          ## Baseline
+
+          - Flutter: 3.47.9 stable, pinned with FVM.
+          - Dart: bundled with the pinned Flutter SDK (3.13.7).
+          - Platforms: Android and iOS only.
+          - Minimum Android API: 24.
+          - Minimum iOS version: 15.0.
+          - UI foundation: Flutter SDK widgets and primitives; no external UI kit.
+          - Runtime dependencies: Flutter SDK only.
+
+          ## Requirements
+
+          - Git
+          - Flutter Version Management (FVM)
+          - Android development tools for Android builds
+          - macOS with Xcode for iOS builds
+
+          ## Getting started
+
+          ```sh
+          fvm install
+          fvm flutter pub get
+          fvm flutter analyze
+          fvm flutter test
+          fvm flutter run
+          ```
+
+          Use the project-pinned SDK through `fvm flutter` and `fvm dart`.
+
+          ## Engineering direction
+
+          - Build Auralis-owned design tokens and components on Flutter SDK primitives.
+          - Keep application-specific decisions out of reusable foundation code.
+          - Add dependencies only when a concrete requirement justifies them.
+          - Treat accessibility, localization, RTL, and reduced motion as requirements.
+          - Keep architecture pragmatic; do not create speculative layers or placeholder features.
+
+          ## Continuous integration
+
+          GitHub Actions runs formatting checks, static analysis, widget tests, and an Android debug build on pushes and pull requests targeting `main`.
+
+          ## Current scope
+
+          This repository contains the minimal mobile platform scaffold and application bootstrap. The design system and reusable component APIs will be introduced in subsequent implementation stages.
+          README
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Verify formatting
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Analyze
+        run: flutter analyze --fatal-infos
+
+      - name: Run widget tests
+        run: flutter test
+
+      - name: Build Android debug APK
+        run: flutter build apk --debug
+
+      - name: Commit generated foundation to GitHub
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit."
+          else
+            git commit -m "Generate verified Flutter mobile foundation"
+            git push origin HEAD:main
+          fi
