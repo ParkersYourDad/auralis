@@ -1,0 +1,25 @@
+# Dart / Flutter
+.dart_tool/
+.packages
+.pub/
+.pub-cache/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# FVM SDK symlink (keep .fvmrc tracked)
+.fvm/flutter_sdk
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
