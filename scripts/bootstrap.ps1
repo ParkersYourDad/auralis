@@ -45,6 +45,12 @@ if ($DirtyState.Count -gt 0) {
     throw 'Working tree is not clean. Commit or stash existing changes before running this bootstrap.'
 }
 
+$GitName = (& git config user.name).Trim()
+$GitEmail = (& git config user.email).Trim()
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($GitName) -or [string]::IsNullOrWhiteSpace($GitEmail)) {
+    throw 'Git author identity is not configured. Set git config user.name and git config user.email, then rerun.'
+}
+
 $ExistingProjectFiles = @(
     'pubspec.yaml', '.fvmrc', 'android', 'ios', 'lib', 'test'
 ) | Where-Object { Test-Path -LiteralPath (Join-Path $Root $_) }
@@ -224,7 +230,8 @@ A mobile-first Flutter foundation for building Android and iOS applications, wit
 - Minimum Android API: 24.
 - Minimum iOS version: 15.0.
 - UI foundation: Flutter SDK widgets and primitives; no external UI kit.
-- Dependencies: Flutter SDK only at this stage.
+- Runtime dependencies: Flutter SDK only.
+- Development linting: flutter_lints from the official Flutter app template.
 
 ## Requirements
 
