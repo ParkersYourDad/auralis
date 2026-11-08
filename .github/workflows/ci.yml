@@ -3,8 +3,24 @@ name: Flutter CI
 on:
   push:
     branches: [main]
+    paths:
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - 'analysis_options.yaml'
+      - 'lib/**'
+      - 'test/**'
+      - 'android/**'
+      - 'ios/**'
   pull_request:
     branches: [main]
+    paths:
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - 'analysis_options.yaml'
+      - 'lib/**'
+      - 'test/**'
+      - 'android/**'
+      - 'ios/**'
   workflow_dispatch:
 
 permissions:
@@ -16,7 +32,6 @@ concurrency:
 
 jobs:
   android:
-    if: hashFiles('pubspec.yaml') != ''
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -46,7 +61,6 @@ jobs:
         run: flutter build apk --debug
 
   ios:
-    if: hashFiles('pubspec.yaml') != ''
     runs-on: macos-latest
     timeout-minutes: 45
     steps:
