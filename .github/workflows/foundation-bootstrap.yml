@@ -127,8 +127,8 @@ jobs:
 
           source = gradle.read_text()
           patterns = [
-              (r"minSdk\\s*=\\s*flutter\\.minSdkVersion", "minSdk = 24"),
-              (r"minSdkVersion\\s+flutter\\.minSdkVersion", "minSdkVersion 24"),
+              (r"minSdk\s*=\s*flutter\.minSdkVersion", "minSdk = 24"),
+              (r"minSdkVersion\s+flutter\.minSdkVersion", "minSdkVersion 24"),
           ]
           changed = False
           for pattern, replacement in patterns:
